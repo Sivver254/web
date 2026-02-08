@@ -1,6 +1,6 @@
 /**
  * Органайзер Mini App
- * С обработкой текста через OnlySQ AI API
+ * С обработкой текста через OnlySQ AI API + Supabase
  */
 
 // ===================== CONFIG =====================
@@ -12,6 +12,12 @@ const AI_CONFIG = {
         'sq-ta2DwOxK4oeLrQRYLomBGkC4vxxTYJkd'
     ],
     model: 'gpt-4o-mini'
+};
+
+// ===================== SUPABASE CONFIG =====================
+const SUPABASE_CONFIG = {
+    url: 'https://jfeeazsninjzgieeqmnl.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpmZWVhenNuaW5qemdpZWVxbW5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1Mzk0OTYsImV4cCI6MjA4NjExNTQ5Nn0.3GW6bUYT7U6LFSv3TKksdcszdGILC752aqZgbmg12Aw'
 };
 
 // ===================== TELEGRAM =====================
@@ -28,6 +34,8 @@ const state = {
     currentTab: 'reminders',
     reminderFilter: 'active',
     transactionType: 'income',
+    dbUserId: null, // ID пользователя в Supabase
+    telegramId: null, // Telegram ID
     isRecording: false,
     isProcessingVoice: false,
     recognition: null,
@@ -42,9 +50,11 @@ const $ = id => document.getElementById(id);
 const $$ = sel => document.querySelectorAll(sel);
 
 // ===================== INIT =====================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     initTelegram();
+    await initSupabaseUser();
     loadData();
+    await syncRemindersFromDB();
     bindEvents();
     render();
     initSpeechRecognition();
@@ -55,12 +65,154 @@ function initTelegram() {
         tg.ready();
         tg.expand();
 
+        // Получаем Telegram ID
+        if (tg.initDataUnsafe?.user?.id) {
+            state.telegramId = tg.initDataUnsafe.user.id;
+        }
+
         if (tg.themeParams) {
             document.documentElement.style.setProperty(
                 '--bg-app',
                 tg.themeParams.bg_color || '#0D0D12'
             );
         }
+    }
+}
+
+// ===================== SUPABASE =====================
+async function supabaseRequest(endpoint, options = {}) {
+    const url = `${SUPABASE_CONFIG.url}/rest/v1/${endpoint}`;
+    const headers = {
+        'apikey': SUPABASE_CONFIG.anonKey,
+        'Authorization': `Bearer ${SUPABASE_CONFIG.anonKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': options.prefer || 'return=representation'
+    };
+    
+    try {
+        const response = await fetch(url, {
+            method: options.method || 'GET',
+            headers,
+            body: options.body ? JSON.stringify(options.body) : undefined
+        });
+        
+        if (!response.ok) {
+            const error = await response.text();
+            console.error('Supabase error:', error);
+            return null;
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (e) {
+        console.error('Supabase request error:', e);
+        return null;
+    }
+}
+
+async function initSupabaseUser() {
+    if (!state.telegramId) {
+        console.log('No Telegram ID, using local storage only');
+        return;
+    }
+    
+    try {
+        // Ищем пользователя по telegram_id
+        const users = await supabaseRequest(`users?telegram_id=eq.${state.telegramId}&select=id`);
+        
+        if (users && users.length > 0) {
+            state.dbUserId = users[0].id;
+            console.log('User found in DB:', state.dbUserId);
+        } else {
+            console.log('User not found in DB, will use local storage');
+        }
+    } catch (e) {
+        console.error('Error getting user:', e);
+    }
+}
+
+async function syncRemindersFromDB() {
+    if (!state.dbUserId) return;
+    
+    try {
+        const reminders = await supabaseRequest(
+            `reminders?user_id=eq.${state.dbUserId}&is_completed=eq.false&select=*&order=remind_at.asc`
+        );
+        
+        if (reminders && reminders.length > 0) {
+            state.reminders = reminders.map(r => ({
+                id: r.id,
+                dbId: r.id,
+                topic: r.topic,
+                remindAt: r.remind_at,
+                repeatType: r.repeat_type,
+                isCompleted: r.is_completed,
+                createdAt: r.created_at
+            }));
+            saveData();
+            console.log('Synced reminders from DB:', reminders.length);
+        }
+    } catch (e) {
+        console.error('Error syncing reminders:', e);
+    }
+}
+
+async function saveReminderToDB(reminder) {
+    if (!state.dbUserId) {
+        console.log('No DB user ID, saving to local only');
+        return null;
+    }
+    
+    try {
+        const result = await supabaseRequest('reminders', {
+            method: 'POST',
+            body: {
+                user_id: state.dbUserId,
+                topic: reminder.topic,
+                remind_at: reminder.remindAt,
+                repeat_type: reminder.repeatType || 'once',
+                is_active: true,
+                is_completed: false,
+                created_at: new Date().toISOString()
+            }
+        });
+        
+        if (result && result.length > 0) {
+            console.log('Reminder saved to DB:', result[0].id);
+            return result[0];
+        }
+        return null;
+    } catch (e) {
+        console.error('Error saving reminder to DB:', e);
+        return null;
+    }
+}
+
+async function deleteReminderFromDB(dbId) {
+    if (!dbId) return;
+    
+    try {
+        await supabaseRequest(`reminders?id=eq.${dbId}`, {
+            method: 'DELETE',
+            prefer: 'return=minimal'
+        });
+        console.log('Reminder deleted from DB:', dbId);
+    } catch (e) {
+        console.error('Error deleting reminder from DB:', e);
+    }
+}
+
+async function completeReminderInDB(dbId, isCompleted) {
+    if (!dbId) return;
+    
+    try {
+        await supabaseRequest(`reminders?id=eq.${dbId}`, {
+            method: 'PATCH',
+            body: { is_completed: isCompleted }
+        });
+        console.log('Reminder updated in DB:', dbId, 'completed:', isCompleted);
+    } catch (e) {
+        console.error('Error completing reminder in DB:', e);
     }
 }
 
@@ -160,9 +312,41 @@ async function processVoiceInput(text) {
 }
 
 // ===================== DATA =====================
+function getStorageKey() {
+    // Уникальный ключ для каждого пользователя
+    return state.telegramId ? `organizer_data_${state.telegramId}` : 'organizer_data_guest';
+}
+
 function loadData() {
     try {
-        const saved = localStorage.getItem('organizer_data');
+        // Удаляем старые общие данные (от предыдущей версии)
+        if (localStorage.getItem('organizer_data')) {
+            localStorage.removeItem('organizer_data');
+            console.log('Removed old shared data');
+        }
+        
+        // Проверяем, не сменился ли пользователь
+        const lastUserId = localStorage.getItem('organizer_last_user');
+        const currentUserId = state.telegramId ? String(state.telegramId) : 'guest';
+        
+        if (lastUserId && lastUserId !== currentUserId) {
+            // Пользователь сменился - очищаем старые данные из state
+            console.log('User changed from', lastUserId, 'to', currentUserId);
+            state.reminders = [];
+            state.transactions = [];
+            state.settings = {
+                notifications: true,
+                morningTime: '08:00'
+            };
+        }
+        
+        // Сохраняем текущего пользователя
+        localStorage.setItem('organizer_last_user', currentUserId);
+        
+        // Загружаем данные для текущего пользователя
+        const storageKey = getStorageKey();
+        const saved = localStorage.getItem(storageKey);
+        
         if (saved) {
             const data = JSON.parse(saved);
             state.reminders = data.reminders || [];
@@ -181,7 +365,8 @@ function loadData() {
 
 function saveData() {
     try {
-        localStorage.setItem('organizer_data', JSON.stringify({
+        const storageKey = getStorageKey();
+        localStorage.setItem(storageKey, JSON.stringify({
             reminders: state.reminders,
             transactions: state.transactions,
             settings: state.settings
@@ -458,7 +643,7 @@ async function parseWithAI(text) {
 ОТВЕТЬ ТОЛЬКО JSON без markdown:
 
 Для напоминания:
-{"type":"reminder","topic":"тема","datetime":"YYYY-MM-DDTHH:MM:SS"}
+{"type":"reminder","topic":"краткая тема напоминания","datetime":"YYYY-MM-DDTHH:MM:SS+03:00"}
 
 Для финансов:
 {"type":"income","amount":число,"description":"описание"}
@@ -468,13 +653,27 @@ async function parseWithAI(text) {
 Если не понял:
 {"type":"unknown"}
 
-Правила времени:
+ВАЖНО: Тема напоминания должна быть краткой и понятной. Например:
+- "напомни позвонить маме в 5" → topic: "Позвонить маме"
+- "напомни завтра в 9 про встречу" → topic: "Встреча"
+- "через час проверить почту" → topic: "Проверить почту"
+
+Правила времени (24-часовой формат):
+- "сегодня" = текущая дата
 - "завтра" = следующий день
 - "утром" = 08:00
-- "днём" = 14:00  
-- "вечером" = 20:00
+- "днём" = 14:00
+- "вечером" = 19:00
+- "в 5 часов", "в пять" = 17:00 (вечер, если без уточнения)
+- "в 5 утра" = 05:00
+- "в 9 часов" = 09:00 (утро)
+- "в 10" = 10:00
+- "в 15" или "в 3 дня" = 15:00
 - "через час" = +1 час от сейчас
-- Если время не указано, ставь 10:00
+- "через 30 минут" = +30 минут от сейчас
+- Если время не указано явно, ставь 10:00
+- Если время с 1 до 6 без уточнения - это PM (13:00-18:00)
+- Если время с 7 до 12 без уточнения - это AM
 
 Правила финансов:
 - "50к" = 50000
@@ -515,7 +714,7 @@ async function processInput(text) {
     hideLoading();
 
     if (result.type === 'reminder') {
-        addReminder({
+        await addReminder({
             topic: result.topic || 'Напоминание',
             remindAt: result.datetime || new Date(Date.now() + 3600000).toISOString()
         });
@@ -628,7 +827,7 @@ function parseLocally(text) {
 }
 
 // ===================== REMINDERS =====================
-function addReminder(data) {
+async function addReminder(data) {
     const reminder = {
         id: Date.now(),
         topic: data.topic,
@@ -638,6 +837,13 @@ function addReminder(data) {
         createdAt: new Date().toISOString()
     };
 
+    // Сохраняем в Supabase
+    const dbResult = await saveReminderToDB(reminder);
+    if (dbResult) {
+        reminder.dbId = dbResult.id;
+        reminder.id = dbResult.id; // Используем ID из базы
+    }
+
     state.reminders.push(reminder);
     saveData();
     render();
@@ -645,27 +851,33 @@ function addReminder(data) {
     const date = new Date(data.remindAt);
     showToast(`Напомню: ${formatDateTime(date)}`, 'success');
     haptic('success');
-
-    if (tg) {
-        tg.sendData(JSON.stringify({
-            action: 'reminder_created',
-            reminder: reminder
-        }));
-    }
 }
 
-function toggleReminder(id) {
-    const reminder = state.reminders.find(r => r.id === id);
+async function toggleReminder(id) {
+    const reminder = state.reminders.find(r => r.id === id || r.dbId === id);
     if (reminder) {
         reminder.isCompleted = !reminder.isCompleted;
+        
+        // Синхронизируем с БД
+        if (reminder.dbId) {
+            await completeReminderInDB(reminder.dbId, reminder.isCompleted);
+        }
+        
         saveData();
         render();
         haptic('light');
     }
 }
 
-function deleteReminder(id) {
-    state.reminders = state.reminders.filter(r => r.id !== id);
+async function deleteReminder(id) {
+    const reminder = state.reminders.find(r => r.id === id || r.dbId === id);
+    
+    // Удаляем из БД
+    if (reminder?.dbId) {
+        await deleteReminderFromDB(reminder.dbId);
+    }
+    
+    state.reminders = state.reminders.filter(r => r.id !== id && r.dbId !== id);
     saveData();
     render();
     closeSheet('reminder');
@@ -696,12 +908,13 @@ function openReminderSheet(id) {
     `;
 
     if (footer) {
+        const reminderId = reminder.id || reminder.dbId;
         footer.innerHTML = reminder.isCompleted ? `
-            <button class="btn-primary" onclick="toggleReminder(${id}); closeSheet('reminder');">Восстановить</button>
+            <button class="btn-primary" onclick="handleToggleReminder(${reminderId})">Восстановить</button>
         ` : `
             <div style="display: flex; gap: 12px;">
-                <button class="btn-primary" style="flex:1" onclick="toggleReminder(${id}); closeSheet('reminder');">✓ Готово</button>
-                <button class="settings-danger" style="flex:1" onclick="deleteReminder(${id})">Удалить</button>
+                <button class="btn-primary" style="flex:1" onclick="handleToggleReminder(${reminderId})">✓ Готово</button>
+                <button class="settings-danger" style="flex:1" onclick="handleDeleteReminder(${reminderId})">Удалить</button>
             </div>
         `;
     }
@@ -709,8 +922,20 @@ function openReminderSheet(id) {
     openSheet('reminder');
 }
 
+// Обертки для async функций
+async function handleToggleReminder(id) {
+    await toggleReminder(id);
+    closeSheet('reminder');
+}
+
+async function handleDeleteReminder(id) {
+    await deleteReminder(id);
+}
+
 window.toggleReminder = toggleReminder;
 window.deleteReminder = deleteReminder;
+window.handleToggleReminder = handleToggleReminder;
+window.handleDeleteReminder = handleDeleteReminder;
 window.openReminderSheet = openReminderSheet;
 window.closeSheet = closeSheet;
 
