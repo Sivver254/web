@@ -29,35 +29,27 @@
         <div class="status-bar-spacer"></div>
 
         <!-- Header -->
-        <div class="app-header">
-            <div class="header-left">
-                <h1>Органайзер</h1>
-                <span class="status-badge" id="connectionStatus">Online</span>
-            </div>
-            <button id="settingsBtn" class="icon-btn" aria-label="Настройки">
-                <svg viewBox="0 0 24 24" fill="none" class="settings-icon">
-                    <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round" />
-                    <path
-                        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"
-                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-            </button>
-        </div>
-
-        <!-- VOICE MODAL -->
-        <div id="voiceModal" class="modal-overlay">
-            <div class="voice-content">
-                <div class="voice-waves">
-                    <div class="wave"></div>
-                    <div class="wave"></div>
-                    <div class="wave"></div>
+        <header class="app-header">
+            <div class="header-content">
+                <div class="header-left">
+                    <div class="logo-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </div>
+                    <h1 class="app-title">Органайзер</h1>
                 </div>
-                <div id="voiceStatus" class="voice-status">Слушаю...</div>
-                <div id="voiceTranscript" class="voice-text-preview"></div>
-                <button id="voiceCancel" class="btn-text">Отмена</button>
+                <button class="settings-btn-premium" id="settingsBtn" aria-label="Настройки">
+                    <div class="settings-icon-wrap">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" stroke="currentColor" stroke-width="1.5"/>
+                            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/>
+                        </svg>
+                    </div>
+                </button>
             </div>
-        </div>
+        </header>
 
         <!-- Main Container -->
         <main class="main-container">
@@ -65,18 +57,23 @@
             <section class="quick-actions">
                 <button class="action-card voice-card" id="voiceBtn">
                     <div class="action-icon voice-icon">
-                        <svg viewBox="0 0 24 24" fill="none">
+                        <svg viewBox="0 0 24 24" fill="none" class="mic-svg">
                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" stroke="currentColor"
                                 stroke-width="2" />
                             <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" stroke="currentColor" stroke-width="2"
                                 stroke-linecap="round" stroke-linejoin="round" />
                         </svg>
                         <div class="voice-waves" id="voiceWaves">
-                            <span></span><span></span><span></span><span></span>
+                            <span></span><span></span><span></span><span></span><span></span>
                         </div>
+                        <div class="voice-pulse"></div>
                     </div>
                     <span class="action-label">Голос</span>
                     <span class="action-hint" id="voiceHint">Нажми и говори</span>
+                    <div class="recording-indicator">
+                        <div class="recording-dot"></div>
+                        <span>REC</span>
+                    </div>
                 </button>
 
                 <button class="action-card text-card" id="textBtn">
@@ -84,6 +81,7 @@
                         <svg viewBox="0 0 24 24" fill="none">
                             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            <path d="M8 9h8M8 13h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
                         </svg>
                     </div>
                     <span class="action-label">Текст</span>
@@ -339,31 +337,67 @@
                 </button>
             </div>
             <div class="sheet-content">
-                <div class="settings-item">
-                    <div class="settings-info">
-                        <span class="settings-label">Уведомления</span>
-                        <span class="settings-desc">Получать напоминания в боте</span>
+                <div class="settings-section">
+                    <h4 class="settings-section-title">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        Уведомления
+                    </h4>
+                    <div class="settings-item">
+                        <div class="settings-info">
+                            <span class="settings-label">Напоминания в боте</span>
+                            <span class="settings-desc">Получать уведомления о событиях</span>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="settingsNotifications" checked>
+                            <span class="switch-slider"></span>
+                        </label>
                     </div>
-                    <label class="switch">
-                        <input type="checkbox" id="settingsNotifications" checked>
-                        <span class="switch-slider"></span>
-                    </label>
-                </div>
-                <div class="settings-item">
-                    <div class="settings-info">
-                        <span class="settings-label">Утреннее время</span>
-                        <span class="settings-desc">Когда присылать утренний дайджест</span>
+                    <div class="settings-item">
+                        <div class="settings-info">
+                            <span class="settings-label">Утренний дайджест</span>
+                            <span class="settings-desc">Время отправки сводки на день</span>
+                        </div>
+                        <input type="time" id="settingsMorning" value="08:00" class="time-input">
                     </div>
-                    <input type="time" id="settingsMorning" value="08:00" class="time-input">
                 </div>
-                <div class="settings-divider"></div>
-                <button class="settings-danger" id="clearAllData">
-                    <svg viewBox="0 0 24 24" fill="none">
-                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-                    </svg>
-                    Очистить все данные
-                </button>
+                
+                <div class="settings-section">
+                    <h4 class="settings-section-title">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 16v-4M12 8h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        Информация
+                    </h4>
+                    <div class="settings-info-card">
+                        <div class="info-row">
+                            <span>Версия</span>
+                            <span class="info-value">1.2.0</span>
+                        </div>
+                        <div class="info-row">
+                            <span>AI модель</span>
+                            <span class="info-value">GPT-4o Mini</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="settings-section danger-section">
+                    <h4 class="settings-section-title danger">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        Опасная зона
+                    </h4>
+                    <button class="settings-danger" id="clearAllData">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                        </svg>
+                        Очистить все данные
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -375,7 +409,10 @@
                     <div class="voice-ring"></div>
                     <div class="voice-ring"></div>
                     <div class="voice-center">
-                        <svg viewBox="0 0 24 24" fill="none">
+                        <div class="voice-bars">
+                            <span></span><span></span><span></span><span></span><span></span>
+                        </div>
+                        <svg viewBox="0 0 24 24" fill="none" class="voice-mic-icon">
                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" stroke="currentColor"
                                 stroke-width="2" />
                             <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" stroke-width="2"
@@ -383,9 +420,22 @@
                         </svg>
                     </div>
                 </div>
-                <p class="voice-status" id="voiceStatus">Говорите...</p>
+                <div class="voice-status-wrap">
+                    <div class="voice-rec-indicator">
+                        <span class="rec-dot"></span>
+                        <span>REC</span>
+                    </div>
+                    <p class="voice-status" id="voiceStatus">Говорите...</p>
+                </div>
                 <p class="voice-transcript" id="voiceTranscript"></p>
-                <button class="voice-cancel" id="voiceCancel">Отмена</button>
+                <div class="voice-actions">
+                    <button class="voice-cancel" id="voiceCancel">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <span>Отмена</span>
+                    </button>
+                </div>
             </div>
         </div>
 
