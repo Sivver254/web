@@ -228,22 +228,19 @@ function initSpeechRecognition() {
 
     state.recognition = new SpeechRecognition();
     state.recognition.lang = 'ru-RU';
-    state.recognition.continuous = true;
+    state.recognition.continuous = false; // Один результат за раз
     state.recognition.interimResults = true;
 
     state.recognition.onresult = (event) => {
         // Если уже обрабатываем - игнорируем
         if (state.isProcessingVoice) return;
         
-        let transcript = '';
-        let isFinal = false;
-
-        for (let i = 0; i < event.results.length; i++) {
-            if (event.results[i] && event.results[i][0]) {
-                transcript += event.results[i][0].transcript;
-                if (event.results[i].isFinal) isFinal = true;
-            }
-        }
+        // Берем только последний результат (не конкатенируем старые)
+        const lastResult = event.results[event.results.length - 1];
+        if (!lastResult || !lastResult[0]) return;
+        
+        const transcript = lastResult[0].transcript;
+        const isFinal = lastResult.isFinal;
 
         const el = $('voiceTranscript');
         if (el) el.textContent = transcript;
@@ -253,7 +250,7 @@ function initSpeechRecognition() {
         
         // Обновляем статус
         const status = $('voiceStatus');
-        if (status) status.textContent = 'Слушаю...';
+        if (status) status.textContent = isFinal ? 'Обрабатываю...' : 'Слушаю...';
         
         // Сбрасываем таймер тишины
         if (state.silenceTimeout) {
@@ -261,15 +258,10 @@ function initSpeechRecognition() {
         }
         
         // Если получили финальный результат и текст достаточно длинный
-        if (isFinal && transcript.trim().length > 5) {
-            // Ждем паузу в речи (1.5 сек) перед обработкой
-            state.silenceTimeout = setTimeout(() => {
-                if (!state.isProcessingVoice && state.isRecording) {
-                    state.isProcessingVoice = true;
-                    stopRecording();
-                    processVoiceInput(transcript.trim());
-                }
-            }, 1500);
+        if (isFinal && transcript.trim().length > 3) {
+            state.isProcessingVoice = true;
+            stopRecording();
+            processVoiceInput(transcript.trim());
         }
     };
 
@@ -600,6 +592,8 @@ async function callAI(prompt, systemPrompt = '') {
     const key = AI_CONFIG.keys[state.keyIndex];
     state.keyIndex = (state.keyIndex + 1) % AI_CONFIG.keys.length;
 
+    console.log('🤖 Calling AI with prompt:', prompt.substring(0, 100));
+
     try {
         const response = await fetch(`${AI_CONFIG.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -619,11 +613,15 @@ async function callAI(prompt, systemPrompt = '') {
         });
 
         if (!response.ok) {
+            const errorText = await response.text();
+            console.error('AI API error response:', response.status, errorText);
             throw new Error(`API error: ${response.status}`);
         }
 
         const data = await response.json();
-        return data.choices?.[0]?.message?.content || null;
+        const content = data.choices?.[0]?.message?.content || null;
+        console.log('🤖 AI response:', content);
+        return content;
     } catch (e) {
         console.error('AI API error:', e);
         return null;
@@ -682,7 +680,10 @@ async function parseWithAI(text) {
 
     const result = await callAI(text, systemPrompt);
 
-    if (!result) return null;
+    if (!result) {
+        console.log('❌ AI returned null');
+        return null;
+    }
 
     try {
         // Remove markdown if present
@@ -690,7 +691,9 @@ async function parseWithAI(text) {
         if (clean.startsWith('```')) {
             clean = clean.replace(/```json?\n?/g, '').replace(/```/g, '');
         }
-        return JSON.parse(clean);
+        const parsed = JSON.parse(clean);
+        console.log('✅ Parsed AI result:', parsed);
+        return parsed;
     } catch (e) {
         console.error('Parse error:', e, result);
         return null;
@@ -701,19 +704,24 @@ async function parseWithAI(text) {
 async function processInput(text) {
     if (!text.trim()) return;
 
+    console.log('📝 Processing input:', text);
     showLoading('AI обрабатывает...');
 
     // Try AI first
     let result = await parseWithAI(text);
+    console.log('🔍 AI parse result:', result);
 
     // Fallback to local parser
     if (!result || result.type === 'unknown') {
+        console.log('⚠️ Using local parser fallback');
         result = parseLocally(text);
+        console.log('🔍 Local parse result:', result);
     }
 
     hideLoading();
 
     if (result.type === 'reminder') {
+        console.log('📅 Creating reminder:', result.topic, result.datetime);
         await addReminder({
             topic: result.topic || 'Напоминание',
             remindAt: result.datetime || new Date(Date.now() + 3600000).toISOString()
@@ -773,7 +781,7 @@ function parseLocally(text) {
     }
 
     // НАПОМИНАНИЯ
-    const hasReminder = /напомни|напоминание|завтра|через|утром|вечером/i.test(lower);
+    const hasReminder = /напомни|напоминание|завтра|через|утром|вечером|позвони|сделай|купи|проверь/i.test(lower);
     if (hasReminder) {
         let remindAt = new Date();
         let topic = text;
@@ -785,40 +793,76 @@ function parseLocally(text) {
             topic = topic.replace(/завтра/gi, '');
         }
 
-        // Время: "в 15" или "в 15:30"
-        const timeMatch = text.match(/в\s*(\d{1,2})(?::(\d{2}))?/i);
+        // Время: "в 5 часов", "в 5", "в 15:30"
+        const timeMatch = text.match(/в\s*(\d{1,2})(?::(\d{2}))?\s*(час(?:а|ов)?)?/i);
         if (timeMatch) {
-            remindAt.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2] || 0), 0, 0);
+            let hours = parseInt(timeMatch[1]);
+            const minutes = parseInt(timeMatch[2] || 0);
+            
+            // Если время от 1 до 6 и нет уточнения "утра" - считаем вечер
+            const hasUtro = /утра/i.test(lower);
+            const hasVechera = /вечера|дня/i.test(lower);
+            
+            if (hours >= 1 && hours <= 6 && !hasUtro) {
+                hours += 12; // 5 часов = 17:00
+            } else if (hours >= 1 && hours <= 11 && hasVechera) {
+                hours += 12;
+            }
+            
+            remindAt.setHours(hours, minutes, 0, 0);
             topic = topic.replace(timeMatch[0], '');
+            topic = topic.replace(/утра|вечера|дня/gi, '');
         }
 
-        // Утром/вечером
-        if (lower.includes('утром')) {
+        // Утром/вечером без конкретного времени
+        if (lower.includes('утром') && !timeMatch) {
             remindAt.setHours(8, 0, 0, 0);
             topic = topic.replace(/утром/gi, '');
-        } else if (lower.includes('вечером')) {
-            remindAt.setHours(20, 0, 0, 0);
+        } else if (lower.includes('вечером') && !timeMatch) {
+            remindAt.setHours(19, 0, 0, 0);
             topic = topic.replace(/вечером/gi, '');
         }
 
-        // Через час
-        if (lower.includes('через час')) {
-            remindAt = new Date(now.getTime() + 3600000);
-            topic = topic.replace(/через\s*час/gi, '');
+        // Через час/N минут
+        const cherezMatch = lower.match(/через\s*(\d+)?\s*(час|минут)/i);
+        if (cherezMatch) {
+            const num = parseInt(cherezMatch[1]) || 1;
+            if (cherezMatch[2].startsWith('час')) {
+                remindAt = new Date(now.getTime() + num * 3600000);
+            } else {
+                remindAt = new Date(now.getTime() + num * 60000);
+            }
+            topic = topic.replace(/через\s*\d*\s*(час|минут)[а-я]*/gi, '');
         }
 
         // Чистим topic
-        topic = topic.replace(/напомни|напоминание|о|про|что/gi, '').trim();
-        if (!topic) topic = 'Напоминание';
+        topic = topic
+            .replace(/напомни(ть)?(\s+мне)?|напоминание|нужно|надо|что|о\s+том|про\s+то|про|мне\s+в|мне/gi, '')
+            .replace(/^\s*,?\s*/, '') // Убираем запятые и пробелы в начале
+            .trim();
+        
+        // Если topic пустой или слишком короткий, пробуем извлечь действие
+        if (!topic || topic.length < 3) {
+            // Ищем глагол + объект: позвонить маме, купить молоко, etc.
+            const actionMatch = text.match(/(позвонить|написать|сделать|купить|проверить|отправить|забрать|взять|принести)\s+(.+?)(?:\s+в\s+\d|$)/i);
+            if (actionMatch) {
+                topic = actionMatch[1] + ' ' + actionMatch[2];
+            } else {
+                topic = 'Напоминание';
+            }
+        }
+        
+        // Капитализируем первую букву
+        topic = topic.charAt(0).toUpperCase() + topic.slice(1);
 
-        // Если в прошлом
-        if (remindAt < now) {
+        // Если в прошлом - переносим на завтра
+        if (remindAt <= now) {
             remindAt.setDate(remindAt.getDate() + 1);
         }
 
         return {
             type: 'reminder',
-            topic: topic.charAt(0).toUpperCase() + topic.slice(1),
+            topic: topic,
             datetime: remindAt.toISOString()
         };
     }
