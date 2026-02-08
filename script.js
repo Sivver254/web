@@ -14,24 +14,6 @@ const AI_CONFIG = {
     model: 'gpt-4o-mini'
 };
 
-// Connection Status Monitor
-window.addEventListener('online', updateConnectionStatus);
-window.addEventListener('offline', updateConnectionStatus);
-
-function updateConnectionStatus() {
-    const badge = document.getElementById('connectionStatus');
-    if (navigator.onLine) {
-        badge.textContent = 'Online';
-        badge.style.color = '#2ecc71';
-        badge.style.background = 'rgba(46, 204, 113, 0.15)';
-    } else {
-        badge.textContent = 'Offline';
-        badge.style.color = '#e74c3c';
-        badge.style.background = 'rgba(231, 76, 60, 0.15)';
-    }
-}
-
-
 // ===================== TELEGRAM =====================
 const tg = window.Telegram?.WebApp;
 
@@ -47,8 +29,12 @@ const state = {
     reminderFilter: 'active',
     transactionType: 'income',
     isRecording: false,
+    isProcessingVoice: false,
     recognition: null,
-    keyIndex: 0
+    keyIndex: 0,
+    voiceTimeout: null,
+    silenceTimeout: null,
+    lastSpeechTime: 0
 };
 
 // ===================== ELEMENTS =====================
@@ -88,62 +74,67 @@ function initSpeechRecognition() {
         return;
     }
 
-
     state.recognition = new SpeechRecognition();
     state.recognition.lang = 'ru-RU';
     state.recognition.continuous = true;
     state.recognition.interimResults = true;
 
-    // Visualizer
-    const visualizer = document.querySelector('.voice-visualizer');
-
-    state.recognition.onstart = () => {
-        if (visualizer) visualizer.style.opacity = '1';
-    };
-
-    state.recognition.onend = () => {
-        if (visualizer) visualizer.style.opacity = '0.5';
-        if (state.isRecording) {
-            const el = $('voiceTranscript');
-            const transcript = el ? el.textContent : '';
-            stopRecording();
-            if (transcript && transcript.length > 3) {
-                processInput(transcript);
-            }
-        }
-    };
-
     state.recognition.onresult = (event) => {
+        // Если уже обрабатываем - игнорируем
+        if (state.isProcessingVoice) return;
+        
         let transcript = '';
         let isFinal = false;
 
         for (let i = 0; i < event.results.length; i++) {
-            const result = event.results[i];
-            transcript += result[0].transcript;
-            if (result.isFinal) isFinal = true;
+            if (event.results[i] && event.results[i][0]) {
+                transcript += event.results[i][0].transcript;
+                if (event.results[i].isFinal) isFinal = true;
+            }
         }
 
         const el = $('voiceTranscript');
-        if (el) {
-            el.textContent = transcript;
-            // Auto scroll
-            el.scrollTop = el.scrollHeight;
+        if (el) el.textContent = transcript;
+        
+        // Обновляем время последней речи
+        state.lastSpeechTime = Date.now();
+        
+        // Обновляем статус
+        const status = $('voiceStatus');
+        if (status) status.textContent = 'Слушаю...';
+        
+        // Сбрасываем таймер тишины
+        if (state.silenceTimeout) {
+            clearTimeout(state.silenceTimeout);
         }
-
-        // Visualize volume loosely based on transcript length change
-        if (visualizer) {
-            const bars = visualizer.querySelectorAll('span');
-            bars.forEach(bar => {
-                bar.style.height = (30 + Math.random() * 70) + '%';
-            });
-        }
-
-        if (isFinal && transcript.length > 3) {
-            stopRecording();
-            setTimeout(() => processInput(transcript), 300);
+        
+        // Если получили финальный результат и текст достаточно длинный
+        if (isFinal && transcript.trim().length > 5) {
+            // Ждем паузу в речи (1.5 сек) перед обработкой
+            state.silenceTimeout = setTimeout(() => {
+                if (!state.isProcessingVoice && state.isRecording) {
+                    state.isProcessingVoice = true;
+                    stopRecording();
+                    processVoiceInput(transcript.trim());
+                }
+            }, 1500);
         }
     };
 
+    state.recognition.onend = () => {
+        if (state.isRecording && !state.isProcessingVoice) {
+            const el = $('voiceTranscript');
+            const transcript = el ? el.textContent.trim() : '';
+            
+            if (transcript.length > 5) {
+                state.isProcessingVoice = true;
+                stopRecording();
+                processVoiceInput(transcript);
+            } else {
+                stopRecording();
+            }
+        }
+    };
 
     state.recognition.onerror = (event) => {
         console.error('Speech error:', event.error);
@@ -155,6 +146,17 @@ function initSpeechRecognition() {
             showToast('Разрешите микрофон', 'error');
         }
     };
+}
+
+// Отдельная функция для обработки голосового ввода
+async function processVoiceInput(text) {
+    if (!text || text.length < 3) {
+        state.isProcessingVoice = false;
+        return;
+    }
+    
+    await processInput(text);
+    state.isProcessingVoice = false;
 }
 
 // ===================== DATA =====================
@@ -301,13 +303,23 @@ function toggleVoiceRecording() {
         showToast('Голосовой ввод недоступен', 'warning');
         return;
     }
+    
+    // Если уже обрабатываем - игнорируем
+    if (state.isProcessingVoice) return;
 
     if (state.isRecording) {
         const el = $('voiceTranscript');
-        const transcript = el ? el.textContent : '';
+        const transcript = el ? el.textContent.trim() : '';
+        
+        // Очищаем таймеры
+        if (state.silenceTimeout) clearTimeout(state.silenceTimeout);
+        if (state.voiceTimeout) clearTimeout(state.voiceTimeout);
+        
         stopRecording();
-        if (transcript && transcript.length > 3) {
-            processInput(transcript);
+        
+        if (transcript.length > 5) {
+            state.isProcessingVoice = true;
+            processVoiceInput(transcript);
         }
     } else {
         startRecording();
@@ -316,17 +328,22 @@ function toggleVoiceRecording() {
 
 function startRecording() {
     if (!state.recognition) return;
+    if (state.isProcessingVoice) return;
 
     state.isRecording = true;
+    state.isProcessingVoice = false;
+    state.lastSpeechTime = Date.now();
 
     const btn = $('voiceBtn');
     const modal = $('voiceModal');
     const status = $('voiceStatus');
     const transcript = $('voiceTranscript');
+    const voiceCard = document.querySelector('.voice-card');
 
     if (btn) btn.classList.add('recording');
+    if (voiceCard) voiceCard.classList.add('recording');
     if (modal) modal.classList.add('active');
-    if (status) status.textContent = 'Слушаю...';
+    if (status) status.textContent = 'Говорите...';
     if (transcript) transcript.textContent = '';
 
     try {
@@ -335,21 +352,26 @@ function startRecording() {
         console.error('Recognition start error:', e);
         stopRecording();
         showToast('Не удалось начать запись', 'error');
+        return;
     }
 
     haptic('medium');
 
-    // Auto-stop
-    setTimeout(() => {
-        if (state.isRecording) {
+    // Максимальное время записи - 15 секунд
+    state.voiceTimeout = setTimeout(() => {
+        if (state.isRecording && !state.isProcessingVoice) {
             const el = $('voiceTranscript');
-            const text = el ? el.textContent : '';
+            const text = el ? el.textContent.trim() : '';
+            
+            if (state.silenceTimeout) clearTimeout(state.silenceTimeout);
             stopRecording();
-            if (text && text.length > 3) {
-                processInput(text);
+            
+            if (text.length > 5) {
+                state.isProcessingVoice = true;
+                processVoiceInput(text);
             }
         }
-    }, 10000);
+    }, 15000);
 }
 
 function stopRecording() {
@@ -357,9 +379,21 @@ function stopRecording() {
 
     const btn = $('voiceBtn');
     const modal = $('voiceModal');
+    const voiceCard = document.querySelector('.voice-card');
 
     if (btn) btn.classList.remove('recording');
+    if (voiceCard) voiceCard.classList.remove('recording');
     if (modal) modal.classList.remove('active');
+    
+    // Очищаем таймеры
+    if (state.voiceTimeout) {
+        clearTimeout(state.voiceTimeout);
+        state.voiceTimeout = null;
+    }
+    if (state.silenceTimeout) {
+        clearTimeout(state.silenceTimeout);
+        state.silenceTimeout = null;
+    }
 
     if (state.recognition) {
         try { state.recognition.stop(); } catch (e) { }
@@ -367,6 +401,9 @@ function stopRecording() {
 }
 
 function cancelVoiceRecording() {
+    state.isProcessingVoice = false;
+    if (state.silenceTimeout) clearTimeout(state.silenceTimeout);
+    if (state.voiceTimeout) clearTimeout(state.voiceTimeout);
     stopRecording();
     const el = $('voiceTranscript');
     if (el) el.textContent = '';
@@ -400,16 +437,13 @@ async function callAI(prompt, systemPrompt = '') {
             throw new Error(`API error: ${response.status}`);
         }
 
-
         const data = await response.json();
         return data.choices?.[0]?.message?.content || null;
     } catch (e) {
         console.error('AI API error:', e);
-        showToast(`AI ошибка: ${e.message}`, 'error');
         return null;
     }
 }
-
 
 async function parseWithAI(text) {
     const now = new Date();
