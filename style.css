@@ -266,6 +266,63 @@ h3,
     height: 22px;
 }
 
+/* Premium Settings Button */
+.settings-btn-premium {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(37, 99, 235, 0.15) 100%);
+    border: 1px solid rgba(124, 58, 237, 0.3);
+    border-radius: var(--radius-lg);
+    color: var(--accent-light);
+    transition: all var(--duration-base) var(--ease-out);
+    overflow: hidden;
+}
+
+.settings-btn-premium::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--accent-gradient);
+    opacity: 0;
+    transition: opacity var(--duration-base);
+}
+
+.settings-btn-premium:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px var(--accent-glow);
+}
+
+.settings-btn-premium:hover::before {
+    opacity: 0.2;
+}
+
+.settings-btn-premium:active {
+    transform: scale(0.95);
+}
+
+.settings-icon-wrap {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.settings-btn-premium svg {
+    width: 24px;
+    height: 24px;
+    transition: transform 0.6s var(--ease-out);
+}
+
+.settings-btn-premium:hover svg {
+    transform: rotate(90deg);
+}
+
 /* ===================== MAIN CONTAINER ===================== */
 .main-container {
     flex: 1;
@@ -393,6 +450,10 @@ h3,
     animation-delay: 0.3s;
 }
 
+.voice-waves span:nth-child(5) {
+    animation-delay: 0.4s;
+}
+
 @keyframes voiceWave {
 
     0%,
@@ -403,6 +464,93 @@ h3,
     50% {
         height: 24px;
     }
+}
+
+/* Recording Indicator */
+.recording-indicator {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: rgba(239, 68, 68, 0.9);
+    border-radius: var(--radius-full);
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.05em;
+    opacity: 0;
+    transform: scale(0.8);
+    transition: all var(--duration-base) var(--ease-bounce);
+}
+
+.voice-card.recording .recording-indicator {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.recording-dot {
+    width: 6px;
+    height: 6px;
+    background: #fff;
+    border-radius: 50%;
+    animation: recordPulse 1s ease-in-out infinite;
+}
+
+@keyframes recordPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* Voice Pulse Effect */
+.voice-pulse {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: var(--radius-lg);
+    background: var(--accent-gradient);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.voice-card.recording .voice-pulse {
+    animation: voicePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes voicePulse {
+    0% {
+        transform: scale(1);
+        opacity: 0.4;
+    }
+    100% {
+        transform: scale(1.5);
+        opacity: 0;
+    }
+}
+
+/* Voice Card Recording State */
+.voice-card.recording {
+    border-color: var(--accent);
+    box-shadow: 0 0 30px var(--accent-glow);
+}
+
+.voice-card.recording .action-icon {
+    animation: iconPulse 1s ease-in-out infinite;
+}
+
+@keyframes iconPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.voice-card.recording .mic-svg {
+    opacity: 0;
+}
+
+.voice-card.recording .voice-waves {
+    opacity: 1;
 }
 
 .action-label {
@@ -757,11 +905,34 @@ h3,
     border-radius: var(--radius-lg);
     cursor: pointer;
     transition: all var(--duration-base);
+    position: relative;
+    overflow: hidden;
+}
+
+.reminder-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent-gradient);
+    opacity: 0;
+    transition: opacity var(--duration-base);
+}
+
+.reminder-item:hover::before {
+    opacity: 1;
 }
 
 .reminder-item:active {
     transform: scale(0.99);
     background: var(--glass-bg-hover);
+}
+
+.reminder-item:hover {
+    border-color: var(--glass-border-hover);
+    box-shadow: var(--shadow-sm);
 }
 
 .reminder-check {
@@ -839,6 +1010,7 @@ h3,
     border-radius: var(--radius-xl);
     margin-bottom: var(--space-5);
     overflow: hidden;
+    box-shadow: 0 8px 32px var(--accent-glow);
 }
 
 .balance-card::before {
@@ -848,7 +1020,18 @@ h3,
     right: -30%;
     width: 80%;
     height: 150%;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 60%);
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 60%);
+    pointer-events: none;
+}
+
+.balance-card::after {
+    content: '';
+    position: absolute;
+    bottom: -20%;
+    left: -20%;
+    width: 60%;
+    height: 60%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, transparent 60%);
     pointer-events: none;
 }
 
@@ -1236,12 +1419,52 @@ h3,
 }
 
 /* ===================== SETTINGS ===================== */
+.settings-section {
+    margin-bottom: var(--space-6);
+}
+
+.settings-section-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-3);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.settings-section-title svg {
+    width: 16px;
+    height: 16px;
+    color: var(--accent-light);
+}
+
+.settings-section-title.danger {
+    color: var(--danger);
+}
+
+.settings-section-title.danger svg {
+    color: var(--danger);
+}
+
 .settings-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--space-4) 0;
-    border-bottom: 1px solid var(--glass-border);
+    padding: var(--space-4);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-2);
+    transition: all var(--duration-base);
+}
+
+.settings-item:hover {
+    border-color: var(--glass-border-hover);
 }
 
 .settings-info {
@@ -1253,11 +1476,43 @@ h3,
     color: var(--text-primary);
     display: block;
     margin-bottom: 2px;
+    font-weight: 500;
 }
 
 .settings-desc {
     font-size: var(--text-xs);
     color: var(--text-tertiary);
+}
+
+.settings-info-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--glass-border);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-value {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.danger-section {
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--glass-border);
 }
 
 .switch {
@@ -1346,7 +1601,7 @@ h3,
 .voice-modal {
     position: fixed;
     inset: 0;
-    background: rgba(13, 13, 18, 0.95);
+    background: linear-gradient(180deg, rgba(13, 13, 18, 0.98) 0%, rgba(20, 15, 35, 0.98) 100%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1356,26 +1611,46 @@ h3,
     transition: all var(--duration-base);
 }
 
+.voice-modal::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: 
+        radial-gradient(ellipse 60% 40% at 50% 20%, rgba(124, 58, 237, 0.2) 0%, transparent 60%),
+        radial-gradient(ellipse 80% 50% at 50% 80%, rgba(37, 99, 235, 0.1) 0%, transparent 50%);
+    pointer-events: none;
+}
+
 .voice-modal.active {
     opacity: 1;
     visibility: visible;
 }
 
 .voice-modal-content {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: var(--space-8);
+    padding: var(--space-6);
+    width: 100%;
+    max-width: 340px;
+    background: rgba(30, 30, 45, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-xl);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    margin: var(--space-4);
 }
 
 .voice-animation {
     position: relative;
-    width: 180px;
-    height: 180px;
+    width: 160px;
+    height: 160px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: var(--space-8);
+    margin-bottom: var(--space-5);
 }
 
 .voice-ring {
@@ -1400,64 +1675,208 @@ h3,
 
 @keyframes voiceRing {
     0% {
-        width: 80px;
-        height: 80px;
-        opacity: 0.8;
+        width: 90px;
+        height: 90px;
+        opacity: 0.6;
     }
 
     100% {
-        width: 180px;
-        height: 180px;
+        width: 160px;
+        height: 160px;
         opacity: 0;
     }
 }
 
 .voice-center {
-    width: 80px;
-    height: 80px;
+    position: relative;
+    width: 90px;
+    height: 90px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: var(--accent-gradient);
     border-radius: 50%;
-    box-shadow: var(--shadow-glow);
+    box-shadow: 
+        0 0 40px var(--accent-glow),
+        0 0 80px rgba(124, 58, 237, 0.3),
+        inset 0 2px 10px rgba(255, 255, 255, 0.2);
 }
 
-.voice-center svg {
-    width: 40px;
-    height: 40px;
+.voice-center svg.voice-mic-icon {
+    position: absolute;
+    width: 36px;
+    height: 36px;
     color: #fff;
+    opacity: 0.2;
+}
+
+/* Voice Bars in Modal */
+.voice-bars {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 36px;
+}
+
+.voice-bars span {
+    width: 5px;
+    background: linear-gradient(180deg, #fff 0%, rgba(255, 255, 255, 0.7) 100%);
+    border-radius: 3px;
+    animation: voiceBar 0.6s ease-in-out infinite;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+.voice-bars span:nth-child(1) { animation-delay: 0s; height: 18px; }
+.voice-bars span:nth-child(2) { animation-delay: 0.1s; height: 28px; }
+.voice-bars span:nth-child(3) { animation-delay: 0.2s; height: 36px; }
+.voice-bars span:nth-child(4) { animation-delay: 0.3s; height: 28px; }
+.voice-bars span:nth-child(5) { animation-delay: 0.4s; height: 18px; }
+
+@keyframes voiceBar {
+    0%, 100% { transform: scaleY(0.4); }
+    50% { transform: scaleY(1); }
+}
+
+/* Voice Status */
+.voice-status-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+    width: 100%;
+}
+
+.voice-rec-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.15) 100%);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: var(--radius-full);
+    font-size: 12px;
+    font-weight: 700;
+    color: #EF4444;
+    letter-spacing: 0.15em;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+}
+
+.rec-dot {
+    width: 10px;
+    height: 10px;
+    background: #EF4444;
+    border-radius: 50%;
+    animation: recDotPulse 1s ease-in-out infinite;
+    box-shadow: 0 0 10px #EF4444;
+}
+
+@keyframes recDotPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
 }
 
 .voice-status {
     font-family: var(--font-display);
-    font-size: var(--text-xl);
+    font-size: var(--text-lg);
     color: var(--text-primary);
-    margin-bottom: var(--space-4);
+    font-weight: 500;
 }
 
 .voice-transcript {
+    width: 100%;
     font-size: var(--text-base);
-    color: var(--text-secondary);
+    color: var(--text-primary);
     text-align: center;
-    max-width: 280px;
-    min-height: 48px;
-    margin-bottom: var(--space-6);
+    min-height: 80px;
+    padding: var(--space-4) var(--space-5);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-5);
+    line-height: 1.6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.voice-transcript:empty::before {
+    content: 'Ваш текст появится здесь...';
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.voice-transcript::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent-gradient);
+    opacity: 0.5;
+}
+
+.voice-actions {
+    width: 100%;
+    display: flex;
+    gap: var(--space-3);
 }
 
 .voice-cancel {
-    padding: var(--space-3) var(--space-8);
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-full);
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-lg);
     font-size: var(--text-base);
-    color: var(--text-secondary);
+    font-weight: 600;
+    color: var(--text-primary);
     transition: all var(--duration-base);
+    position: relative;
+    overflow: hidden;
+}
+
+.voice-cancel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--danger) 0%, #DC2626 100%);
+    opacity: 0;
+    transition: opacity var(--duration-base);
+}
+
+.voice-cancel svg {
+    width: 20px;
+    height: 20px;
+    position: relative;
+    z-index: 1;
+}
+
+.voice-cancel span {
+    position: relative;
+    z-index: 1;
 }
 
 .voice-cancel:hover {
-    background: var(--glass-bg-hover);
-    color: var(--text-primary);
+    border-color: rgba(239, 68, 68, 0.5);
+    box-shadow: 0 4px 20px rgba(239, 68, 68, 0.2);
+}
+
+.voice-cancel:hover::before {
+    opacity: 0.15;
+}
+
+.voice-cancel:active {
+    transform: scale(0.98);
+}
 }
 
 /* ===================== LOADING ===================== */
