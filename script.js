@@ -5,7 +5,7 @@
 
 // ===================== CONFIG =====================
 const AI_CONFIG = {
-    baseUrl: 'https://api.onlysq.ru/ai/v1',
+    baseUrl: 'https://api.onlysq.ru/ai/openai',
     keys: [
         'sq-Ky6Q5xFOYenbWKG2yZoTCqp8ZuXHhX3q',
         'sq-YQ50CiYt2M229MQBAO3WPfrlUiFhTETH',
@@ -13,6 +13,24 @@ const AI_CONFIG = {
     ],
     model: 'gpt-4o-mini'
 };
+
+// Connection Status Monitor
+window.addEventListener('online', updateConnectionStatus);
+window.addEventListener('offline', updateConnectionStatus);
+
+function updateConnectionStatus() {
+    const badge = document.getElementById('connectionStatus');
+    if (navigator.onLine) {
+        badge.textContent = 'Online';
+        badge.style.color = '#2ecc71';
+        badge.style.background = 'rgba(46, 204, 113, 0.15)';
+    } else {
+        badge.textContent = 'Offline';
+        badge.style.color = '#e74c3c';
+        badge.style.background = 'rgba(231, 76, 60, 0.15)';
+    }
+}
+
 
 // ===================== TELEGRAM =====================
 const tg = window.Telegram?.WebApp;
@@ -70,32 +88,21 @@ function initSpeechRecognition() {
         return;
     }
 
+
     state.recognition = new SpeechRecognition();
     state.recognition.lang = 'ru-RU';
     state.recognition.continuous = true;
     state.recognition.interimResults = true;
 
-    state.recognition.onresult = (event) => {
-        let transcript = '';
-        let isFinal = false;
+    // Visualizer
+    const visualizer = document.querySelector('.voice-visualizer');
 
-        for (let i = 0; i < event.results.length; i++) {
-            if (event.results[i] && event.results[i][0]) {
-                transcript += event.results[i][0].transcript;
-                if (event.results[i].isFinal) isFinal = true;
-            }
-        }
-
-        const el = $('voiceTranscript');
-        if (el) el.textContent = transcript;
-
-        if (isFinal && transcript.length > 3) {
-            stopRecording();
-            setTimeout(() => processInput(transcript), 300);
-        }
+    state.recognition.onstart = () => {
+        if (visualizer) visualizer.style.opacity = '1';
     };
 
     state.recognition.onend = () => {
+        if (visualizer) visualizer.style.opacity = '0.5';
         if (state.isRecording) {
             const el = $('voiceTranscript');
             const transcript = el ? el.textContent : '';
@@ -105,6 +112,38 @@ function initSpeechRecognition() {
             }
         }
     };
+
+    state.recognition.onresult = (event) => {
+        let transcript = '';
+        let isFinal = false;
+
+        for (let i = 0; i < event.results.length; i++) {
+            const result = event.results[i];
+            transcript += result[0].transcript;
+            if (result.isFinal) isFinal = true;
+        }
+
+        const el = $('voiceTranscript');
+        if (el) {
+            el.textContent = transcript;
+            // Auto scroll
+            el.scrollTop = el.scrollHeight;
+        }
+
+        // Visualize volume loosely based on transcript length change
+        if (visualizer) {
+            const bars = visualizer.querySelectorAll('span');
+            bars.forEach(bar => {
+                bar.style.height = (30 + Math.random() * 70) + '%';
+            });
+        }
+
+        if (isFinal && transcript.length > 3) {
+            stopRecording();
+            setTimeout(() => processInput(transcript), 300);
+        }
+    };
+
 
     state.recognition.onerror = (event) => {
         console.error('Speech error:', event.error);
@@ -361,13 +400,16 @@ async function callAI(prompt, systemPrompt = '') {
             throw new Error(`API error: ${response.status}`);
         }
 
+
         const data = await response.json();
         return data.choices?.[0]?.message?.content || null;
     } catch (e) {
         console.error('AI API error:', e);
+        showToast(`AI ошибка: ${e.message}`, 'error');
         return null;
     }
 }
+
 
 async function parseWithAI(text) {
     const now = new Date();
