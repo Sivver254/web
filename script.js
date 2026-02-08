@@ -7,9 +7,7 @@
 const AI_CONFIG = {
     baseUrl: 'https://api.onlysq.ru/ai/openai',
     keys: [
-        'sq-Ky6Q5xFOYenbWKG2yZoTCqp8ZuXHhX3q',
-        'sq-YQ50CiYt2M229MQBAO3WPfrlUiFhTETH',
-        'sq-ta2DwOxK4oeLrQRYLomBGkC4vxxTYJkd'
+        'sq-Ky6Q5xFOYenbWKG2yZoTCqp8ZuXHhX3q'
     ],
     model: 'gpt-4o-mini'
 };
@@ -651,10 +649,17 @@ async function parseWithAI(text) {
 Если не понял:
 {"type":"unknown"}
 
-ВАЖНО: Тема напоминания должна быть краткой и понятной. Например:
+ВАЖНО: 
+1. Тема напоминания должна быть краткой и понятной
+2. Используй именительный падеж (что? кто?), НЕ винительный (кого? что?)
+3. Если есть глагол действия - используй инфинитив
+
+Примеры:
 - "напомни позвонить маме в 5" → topic: "Позвонить маме"
-- "напомни завтра в 9 про встречу" → topic: "Встреча"
+- "напомни завтра в 9 про встречу" → topic: "Встреча" (НЕ "Встречу"!)
 - "через час проверить почту" → topic: "Проверить почту"
+- "напомни про врача" → topic: "Врач" (НЕ "Врача"!)
+- "напомни про совещание" → topic: "Совещание"
 
 Правила времени (24-часовой формат):
 - "сегодня" = текущая дата
@@ -841,6 +846,21 @@ function parseLocally(text) {
             .replace(/^\s*,?\s*/, '') // Убираем запятые и пробелы в начале
             .trim();
         
+        // Конвертируем винительный падеж в именительный (встречу→встреча, врача→врач)
+        topic = topic
+            .replace(/(\w+)у$/i, (match, p1) => {
+                // встречу → встреча, почту → почта
+                if (/[аеёиоуыэюя]$/i.test(p1)) return p1 + 'а';
+                return match;
+            })
+            .replace(/(\w+)а$/i, (match, p1, offset, string) => {
+                // врача → врач (только если это одно слово и оканчивается на согласную + а)
+                if (string.trim().split(/\s+/).length === 1 && /[бвгджзклмнпрстфхцчшщ]$/i.test(p1)) {
+                    return p1;
+                }
+                return match;
+            });
+        
         // Если topic пустой или слишком короткий, пробуем извлечь действие
         if (!topic || topic.length < 3) {
             // Ищем глагол + объект: позвонить маме, купить молоко, etc.
@@ -871,7 +891,23 @@ function parseLocally(text) {
 }
 
 // ===================== REMINDERS =====================
+// Защита от дубликатов
+let lastReminderTime = 0;
+let lastReminderTopic = '';
+
 async function addReminder(data) {
+    // Проверка на дубликат (та же тема в течение 5 секунд)
+    const now = Date.now();
+    const topicLower = (data.topic || '').toLowerCase().trim();
+    
+    if (now - lastReminderTime < 5000 && topicLower === lastReminderTopic) {
+        console.log('⚠️ Duplicate reminder blocked:', data.topic);
+        return;
+    }
+    
+    lastReminderTime = now;
+    lastReminderTopic = topicLower;
+    
     const reminder = {
         id: Date.now(),
         topic: data.topic,
