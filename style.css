@@ -1877,7 +1877,6 @@ h3,
 .voice-cancel:active {
     transform: scale(0.98);
 }
-}
 
 /* ===================== LOADING ===================== */
 .loading-overlay {
