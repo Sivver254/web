@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0D0D12">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <title>Органайзер</title>
+    <meta name="description" content="Умный органайзер с AI">
+
+    <!-- Telegram Web App -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <!-- Fonts: Coolvetica + Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div id="app">
+        <!-- Status Bar Spacer -->
+        <div class="status-bar-spacer"></div>
+
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="header-left">
+                    <div class="logo-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </div>
+                    <h1 class="app-title">Органайзер</h1>
+                </div>
+                <button class="header-btn" id="settingsBtn" aria-label="Настройки">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" />
+                        <path
+                            d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Container -->
+        <main class="main-container">
+            <!-- Quick Actions -->
+            <section class="quick-actions">
+                <button class="action-card voice-card" id="voiceBtn">
+                    <div class="action-icon voice-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" stroke="currentColor"
+                                stroke-width="2" />
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        <div class="voice-waves" id="voiceWaves">
+                            <span></span><span></span><span></span><span></span>
+                        </div>
+                    </div>
+                    <span class="action-label">Голос</span>
+                    <span class="action-hint" id="voiceHint">Нажми и говори</span>
+                </button>
+
+                <button class="action-card text-card" id="textBtn">
+                    <div class="action-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </div>
+                    <span class="action-label">Текст</span>
+                    <span class="action-hint">Напиши запрос</span>
+                </button>
+            </section>
+
+            <!-- AI Model Selector -->
+            <section class="model-section">
+                <div class="section-header">
+                    <h2>AI Модель</h2>
+                    <button class="section-toggle" id="modelToggle">
+                        <span id="currentModelName">GPT-4o Mini</span>
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="model-dropdown hidden" id="modelDropdown">
+                    <div class="model-categories">
+                        <button class="model-category active" data-category="recommended">Рекомендуемые</button>
+                        <button class="model-category" data-category="flagship">Flagship</button>
+                        <button class="model-category" data-category="premium">Premium</button>
+                        <button class="model-category" data-category="standard">Standard</button>
+                    </div>
+                    <div class="model-list" id="modelList">
+                        <!-- Models rendered by JS -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tabs -->
+            <nav class="tabs-nav">
+                <button class="tab-btn active" data-tab="reminders">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span>Напоминания</span>
+                </button>
+                <button class="tab-btn" data-tab="finance">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span>Финансы</span>
+                </button>
+            </nav>
+
+            <!-- Tab Content -->
+            <div class="tab-content">
+                <!-- Reminders Tab -->
+                <section class="tab-pane active" id="remindersPane">
+                    <!-- Stats -->
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <span class="stat-number" id="statActive">0</span>
+                            <span class="stat-text">активных</span>
+                        </div>
+                        <div class="stat-divider"></div>
+                        <div class="stat-item">
+                            <span class="stat-number" id="statToday">0</span>
+                            <span class="stat-text">сегодня</span>
+                        </div>
+                        <div class="stat-divider"></div>
+                        <div class="stat-item">
+                            <span class="stat-number" id="statDone">0</span>
+                            <span class="stat-text">выполнено</span>
+                        </div>
+                    </div>
+
+                    <!-- Filter -->
+                    <div class="filter-row">
+                        <button class="filter-btn active" data-filter="active">Активные</button>
+                        <button class="filter-btn" data-filter="completed">Выполненные</button>
+                    </div>
+
+                    <!-- Reminders List -->
+                    <div class="items-list" id="remindersList">
+                        <div class="empty-state" id="emptyReminders">
+                            <div class="empty-icon">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor"
+                                        stroke-width="2" />
+                                </svg>
+                            </div>
+                            <p>Нет напоминаний</p>
+                            <span>Скажи голосом или напиши текстом</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Finance Tab -->
+                <section class="tab-pane" id="financePane">
+                    <!-- Balance Card -->
+                    <div class="balance-card">
+                        <div class="balance-label">Баланс</div>
+                        <div class="balance-value" id="balanceValue">0 ₽</div>
+                        <div class="balance-row">
+                            <div class="balance-stat income">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <path d="M23 6l-9.5 9.5-5-5L1 18" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" />
+                                </svg>
+                                <div>
+                                    <span>Доходы</span>
+                                    <strong id="totalIncome">0 ₽</strong>
+                                </div>
+                            </div>
+                            <div class="balance-stat expense">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <path d="M23 18l-9.5-9.5-5 5L1 6" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" />
+                                </svg>
+                                <div>
+                                    <span>Расходы</span>
+                                    <strong id="totalExpense">0 ₽</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Add -->
+                    <div class="finance-quick">
+                        <button class="quick-add income" id="quickIncome">
+                            <svg viewBox="0 0 24 24" fill="none">
+                                <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" />
+                            </svg>
+                            Доход
+                        </button>
+                        <button class="quick-add expense" id="quickExpense">
+                            <svg viewBox="0 0 24 24" fill="none">
+                                <path d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                            </svg>
+                            Расход
+                        </button>
+                    </div>
+
+                    <!-- Transactions List -->
+                    <div class="items-list" id="transactionsList">
+                        <div class="empty-state" id="emptyTransactions">
+                            <div class="empty-icon">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"
+                                        stroke="currentColor" stroke-width="2" />
+                                </svg>
+                            </div>
+                            <p>Нет операций</p>
+                            <span>Добавь доход или расход</span>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- Bottom Sheet: Text Input -->
+        <div class="sheet-overlay" id="textSheetOverlay"></div>
+        <div class="bottom-sheet" id="textSheet">
+            <div class="sheet-handle"></div>
+            <div class="sheet-header">
+                <h3>Введи запрос</h3>
+                <button class="sheet-close" id="closeTextSheet">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                </button>
+            </div>
+            <div class="sheet-content">
+                <div class="input-wrapper">
+                    <textarea id="textInput" placeholder="Напомни завтра в 9 про встречу..." rows="3"></textarea>
+                </div>
+                <div class="examples">
+                    <span class="example-label">Примеры:</span>
+                    <button class="example-chip" data-text="Напомни завтра в 9 про встречу">завтра в 9</button>
+                    <button class="example-chip" data-text="Напомни через час позвонить">через час</button>
+                    <button class="example-chip" data-text="Доход 50000">доход 50к</button>
+                    <button class="example-chip" data-text="Расход 1500 продукты">расход</button>
+                </div>
+            </div>
+            <div class="sheet-footer">
+                <button class="btn-primary" id="sendTextBtn">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    Отправить
+                </button>
+            </div>
+        </div>
+
+        <!-- Bottom Sheet: Reminder Details -->
+        <div class="sheet-overlay" id="reminderSheetOverlay"></div>
+        <div class="bottom-sheet" id="reminderSheet">
+            <div class="sheet-handle"></div>
+            <div class="sheet-header">
+                <h3 id="reminderSheetTitle">Напоминание</h3>
+                <button class="sheet-close" id="closeReminderSheet">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                </button>
+            </div>
+            <div class="sheet-content" id="reminderSheetContent">
+                <!-- Dynamic content -->
+            </div>
+            <div class="sheet-footer" id="reminderSheetFooter">
+                <!-- Dynamic buttons -->
+            </div>
+        </div>
+
+        <!-- Bottom Sheet: Add Transaction -->
+        <div class="sheet-overlay" id="transactionSheetOverlay"></div>
+        <div class="bottom-sheet" id="transactionSheet">
+            <div class="sheet-handle"></div>
+            <div class="sheet-header">
+                <h3 id="transactionSheetTitle">Добавить доход</h3>
+                <button class="sheet-close" id="closeTransactionSheet">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                </button>
+            </div>
+            <div class="sheet-content">
+                <div class="input-group">
+                    <label>Сумма</label>
+                    <div class="amount-input">
+                        <input type="number" id="transAmount" placeholder="0" inputmode="numeric">
+                        <span class="currency">₽</span>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Описание</label>
+                    <input type="text" id="transDesc" placeholder="Зарплата, продукты...">
+                </div>
+            </div>
+            <div class="sheet-footer">
+                <button class="btn-primary" id="addTransactionBtn">Добавить</button>
+            </div>
+        </div>
+
+        <!-- Bottom Sheet: Settings -->
+        <div class="sheet-overlay" id="settingsSheetOverlay"></div>
+        <div class="bottom-sheet" id="settingsSheet">
+            <div class="sheet-handle"></div>
+            <div class="sheet-header">
+                <h3>Настройки</h3>
+                <button class="sheet-close" id="closeSettingsSheet">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                </button>
+            </div>
+            <div class="sheet-content">
+                <div class="settings-item">
+                    <div class="settings-info">
+                        <span class="settings-label">Уведомления</span>
+                        <span class="settings-desc">Получать напоминания в боте</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="settingsNotifications" checked>
+                        <span class="switch-slider"></span>
+                    </label>
+                </div>
+                <div class="settings-item">
+                    <div class="settings-info">
+                        <span class="settings-label">Утреннее время</span>
+                        <span class="settings-desc">Когда присылать утренний дайджест</span>
+                    </div>
+                    <input type="time" id="settingsMorning" value="08:00" class="time-input">
+                </div>
+                <div class="settings-divider"></div>
+                <button class="settings-danger" id="clearAllData">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                    Очистить все данные
+                </button>
+            </div>
+        </div>
+
+        <!-- Voice Recognition Modal -->
+        <div class="voice-modal" id="voiceModal">
+            <div class="voice-modal-content">
+                <div class="voice-animation">
+                    <div class="voice-ring"></div>
+                    <div class="voice-ring"></div>
+                    <div class="voice-ring"></div>
+                    <div class="voice-center">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" stroke="currentColor"
+                                stroke-width="2" />
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" />
+                        </svg>
+                    </div>
+                </div>
+                <p class="voice-status" id="voiceStatus">Говорите...</p>
+                <p class="voice-transcript" id="voiceTranscript"></p>
+                <button class="voice-cancel" id="voiceCancel">Отмена</button>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="loading-spinner">
+                <div class="spinner-ring"></div>
+            </div>
+            <p class="loading-text" id="loadingText">Обрабатываю...</p>
+        </div>
+
+        <!-- Toast Container -->
+        <div class="toast-container" id="toastContainer"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

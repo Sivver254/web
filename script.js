@@ -1,0 +1,962 @@
+/**
+ * Органайзер Mini App
+ * С обработкой текста через OnlySQ AI API
+ */
+
+// ===================== CONFIG =====================
+const AI_CONFIG = {
+    baseUrl: 'https://api.onlysq.ru/ai/v1',
+    keys: [
+        'sq-Ky6Q5xFOYenbWKG2yZoTCqp8ZuXHhX3q',
+        'sq-YQ50CiYt2M229MQBAO3WPfrlUiFhTETH',
+        'sq-ta2DwOxK4oeLrQRYLomBGkC4vxxTYJkd'
+    ],
+    model: 'gpt-4o-mini'
+};
+
+// ===================== TELEGRAM =====================
+const tg = window.Telegram?.WebApp;
+
+// ===================== STATE =====================
+const state = {
+    reminders: [],
+    transactions: [],
+    settings: {
+        notifications: true,
+        morningTime: '08:00'
+    },
+    currentTab: 'reminders',
+    reminderFilter: 'active',
+    transactionType: 'income',
+    isRecording: false,
+    recognition: null,
+    keyIndex: 0
+};
+
+// ===================== ELEMENTS =====================
+const $ = id => document.getElementById(id);
+const $$ = sel => document.querySelectorAll(sel);
+
+// ===================== INIT =====================
+document.addEventListener('DOMContentLoaded', () => {
+    initTelegram();
+    loadData();
+    bindEvents();
+    render();
+    initSpeechRecognition();
+});
+
+function initTelegram() {
+    if (tg) {
+        tg.ready();
+        tg.expand();
+
+        if (tg.themeParams) {
+            document.documentElement.style.setProperty(
+                '--bg-app',
+                tg.themeParams.bg_color || '#0D0D12'
+            );
+        }
+    }
+}
+
+function initSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+        console.log('Speech Recognition не поддерживается');
+        const hint = $('voiceHint');
+        if (hint) hint.textContent = 'Недоступно';
+        return;
+    }
+
+    state.recognition = new SpeechRecognition();
+    state.recognition.lang = 'ru-RU';
+    state.recognition.continuous = true;
+    state.recognition.interimResults = true;
+
+    state.recognition.onresult = (event) => {
+        let transcript = '';
+        let isFinal = false;
+
+        for (let i = 0; i < event.results.length; i++) {
+            if (event.results[i] && event.results[i][0]) {
+                transcript += event.results[i][0].transcript;
+                if (event.results[i].isFinal) isFinal = true;
+            }
+        }
+
+        const el = $('voiceTranscript');
+        if (el) el.textContent = transcript;
+
+        if (isFinal && transcript.length > 3) {
+            stopRecording();
+            setTimeout(() => processInput(transcript), 300);
+        }
+    };
+
+    state.recognition.onend = () => {
+        if (state.isRecording) {
+            const el = $('voiceTranscript');
+            const transcript = el ? el.textContent : '';
+            stopRecording();
+            if (transcript && transcript.length > 3) {
+                processInput(transcript);
+            }
+        }
+    };
+
+    state.recognition.onerror = (event) => {
+        console.error('Speech error:', event.error);
+        stopRecording();
+
+        if (event.error === 'network') {
+            showToast('Нет сети. Используйте текстовый ввод.', 'warning');
+        } else if (event.error === 'not-allowed') {
+            showToast('Разрешите микрофон', 'error');
+        }
+    };
+}
+
+// ===================== DATA =====================
+function loadData() {
+    try {
+        const saved = localStorage.getItem('organizer_data');
+        if (saved) {
+            const data = JSON.parse(saved);
+            state.reminders = data.reminders || [];
+            state.transactions = data.transactions || [];
+            state.settings = { ...state.settings, ...data.settings };
+        }
+
+        const notif = $('settingsNotifications');
+        const morning = $('settingsMorning');
+        if (notif) notif.checked = state.settings.notifications;
+        if (morning) morning.value = state.settings.morningTime;
+    } catch (e) {
+        console.error('Load error:', e);
+    }
+}
+
+function saveData() {
+    try {
+        localStorage.setItem('organizer_data', JSON.stringify({
+            reminders: state.reminders,
+            transactions: state.transactions,
+            settings: state.settings
+        }));
+    } catch (e) {
+        console.error('Save error:', e);
+    }
+}
+
+// ===================== EVENTS =====================
+function bindEvents() {
+    // Voice
+    const voiceBtn = $('voiceBtn');
+    const voiceCancel = $('voiceCancel');
+    if (voiceBtn) voiceBtn.addEventListener('click', toggleVoiceRecording);
+    if (voiceCancel) voiceCancel.addEventListener('click', cancelVoiceRecording);
+
+    // Text
+    const textBtn = $('textBtn');
+    const closeText = $('closeTextSheet');
+    const textOverlay = $('textSheetOverlay');
+    const sendText = $('sendTextBtn');
+
+    if (textBtn) textBtn.addEventListener('click', () => openSheet('text'));
+    if (closeText) closeText.addEventListener('click', () => closeSheet('text'));
+    if (textOverlay) textOverlay.addEventListener('click', () => closeSheet('text'));
+    if (sendText) sendText.addEventListener('click', sendTextInput);
+
+    // Examples
+    $$('.example-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            const input = $('textInput');
+            if (input) {
+                input.value = chip.dataset.text || chip.textContent;
+                input.focus();
+            }
+        });
+    });
+
+    // Hide model section (now in admin)
+    const modelSection = document.querySelector('.model-section');
+    if (modelSection) modelSection.style.display = 'none';
+
+    // Tabs
+    $$('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+
+    // Filters
+    $$('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            state.reminderFilter = btn.dataset.filter;
+            $$('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderReminders();
+        });
+    });
+
+    // Finance
+    const quickIncome = $('quickIncome');
+    const quickExpense = $('quickExpense');
+    if (quickIncome) quickIncome.addEventListener('click', () => {
+        state.transactionType = 'income';
+        const title = $('transactionSheetTitle');
+        if (title) title.textContent = 'Добавить доход';
+        openSheet('transaction');
+    });
+    if (quickExpense) quickExpense.addEventListener('click', () => {
+        state.transactionType = 'expense';
+        const title = $('transactionSheetTitle');
+        if (title) title.textContent = 'Добавить расход';
+        openSheet('transaction');
+    });
+
+    // Transaction sheet
+    const closeTrans = $('closeTransactionSheet');
+    const transOverlay = $('transactionSheetOverlay');
+    const addTrans = $('addTransactionBtn');
+    if (closeTrans) closeTrans.addEventListener('click', () => closeSheet('transaction'));
+    if (transOverlay) transOverlay.addEventListener('click', () => closeSheet('transaction'));
+    if (addTrans) addTrans.addEventListener('click', addTransaction);
+
+    // Settings
+    const settingsBtn = $('settingsBtn');
+    const closeSettings = $('closeSettingsSheet');
+    const settingsOverlay = $('settingsSheetOverlay');
+    const notifToggle = $('settingsNotifications');
+    const morningInput = $('settingsMorning');
+    const clearBtn = $('clearAllData');
+
+    if (settingsBtn) settingsBtn.addEventListener('click', () => openSheet('settings'));
+    if (closeSettings) closeSettings.addEventListener('click', () => closeSheet('settings'));
+    if (settingsOverlay) settingsOverlay.addEventListener('click', () => closeSheet('settings'));
+    if (notifToggle) notifToggle.addEventListener('change', updateSettings);
+    if (morningInput) morningInput.addEventListener('change', updateSettings);
+    if (clearBtn) clearBtn.addEventListener('click', clearAllData);
+
+    // Reminder sheet
+    const closeReminder = $('closeReminderSheet');
+    const reminderOverlay = $('reminderSheetOverlay');
+    if (closeReminder) closeReminder.addEventListener('click', () => closeSheet('reminder'));
+    if (reminderOverlay) reminderOverlay.addEventListener('click', () => closeSheet('reminder'));
+
+    // Enter key
+    const textInput = $('textInput');
+    if (textInput) {
+        textInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendTextInput();
+            }
+        });
+    }
+}
+
+// ===================== VOICE =====================
+function toggleVoiceRecording() {
+    if (!state.recognition) {
+        showToast('Голосовой ввод недоступен', 'warning');
+        return;
+    }
+
+    if (state.isRecording) {
+        const el = $('voiceTranscript');
+        const transcript = el ? el.textContent : '';
+        stopRecording();
+        if (transcript && transcript.length > 3) {
+            processInput(transcript);
+        }
+    } else {
+        startRecording();
+    }
+}
+
+function startRecording() {
+    if (!state.recognition) return;
+
+    state.isRecording = true;
+
+    const btn = $('voiceBtn');
+    const modal = $('voiceModal');
+    const status = $('voiceStatus');
+    const transcript = $('voiceTranscript');
+
+    if (btn) btn.classList.add('recording');
+    if (modal) modal.classList.add('active');
+    if (status) status.textContent = 'Слушаю...';
+    if (transcript) transcript.textContent = '';
+
+    try {
+        state.recognition.start();
+    } catch (e) {
+        console.error('Recognition start error:', e);
+        stopRecording();
+        showToast('Не удалось начать запись', 'error');
+    }
+
+    haptic('medium');
+
+    // Auto-stop
+    setTimeout(() => {
+        if (state.isRecording) {
+            const el = $('voiceTranscript');
+            const text = el ? el.textContent : '';
+            stopRecording();
+            if (text && text.length > 3) {
+                processInput(text);
+            }
+        }
+    }, 10000);
+}
+
+function stopRecording() {
+    state.isRecording = false;
+
+    const btn = $('voiceBtn');
+    const modal = $('voiceModal');
+
+    if (btn) btn.classList.remove('recording');
+    if (modal) modal.classList.remove('active');
+
+    if (state.recognition) {
+        try { state.recognition.stop(); } catch (e) { }
+    }
+}
+
+function cancelVoiceRecording() {
+    stopRecording();
+    const el = $('voiceTranscript');
+    if (el) el.textContent = '';
+}
+
+// ===================== AI API =====================
+async function callAI(prompt, systemPrompt = '') {
+    // Rotate keys
+    const key = AI_CONFIG.keys[state.keyIndex];
+    state.keyIndex = (state.keyIndex + 1) % AI_CONFIG.keys.length;
+
+    try {
+        const response = await fetch(`${AI_CONFIG.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${key}`
+            },
+            body: JSON.stringify({
+                model: AI_CONFIG.model,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: prompt }
+                ],
+                temperature: 0.1,
+                max_tokens: 500
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.choices?.[0]?.message?.content || null;
+    } catch (e) {
+        console.error('AI API error:', e);
+        return null;
+    }
+}
+
+async function parseWithAI(text) {
+    const now = new Date();
+    const systemPrompt = `Ты парсер для органайзера. Анализируй текст и определи:
+1. Это напоминание или финансовая операция?
+2. Извлеки данные.
+
+Текущее время: ${now.toISOString()}
+Дата: ${now.toLocaleDateString('ru-RU')} (${now.toLocaleDateString('ru-RU', { weekday: 'long' })})
+Время: ${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+
+ОТВЕТЬ ТОЛЬКО JSON без markdown:
+
+Для напоминания:
+{"type":"reminder","topic":"тема","datetime":"YYYY-MM-DDTHH:MM:SS"}
+
+Для финансов:
+{"type":"income","amount":число,"description":"описание"}
+или
+{"type":"expense","amount":число,"description":"описание"}
+
+Если не понял:
+{"type":"unknown"}
+
+Правила времени:
+- "завтра" = следующий день
+- "утром" = 08:00
+- "днём" = 14:00  
+- "вечером" = 20:00
+- "через час" = +1 час от сейчас
+- Если время не указано, ставь 10:00
+
+Правила финансов:
+- "50к" = 50000
+- "зп", "зарплата" = доход
+- "потратил", "купил" = расход`;
+
+    const result = await callAI(text, systemPrompt);
+
+    if (!result) return null;
+
+    try {
+        // Remove markdown if present
+        let clean = result.trim();
+        if (clean.startsWith('```')) {
+            clean = clean.replace(/```json?\n?/g, '').replace(/```/g, '');
+        }
+        return JSON.parse(clean);
+    } catch (e) {
+        console.error('Parse error:', e, result);
+        return null;
+    }
+}
+
+// ===================== PROCESS INPUT =====================
+async function processInput(text) {
+    if (!text.trim()) return;
+
+    showLoading('AI обрабатывает...');
+
+    // Try AI first
+    let result = await parseWithAI(text);
+
+    // Fallback to local parser
+    if (!result || result.type === 'unknown') {
+        result = parseLocally(text);
+    }
+
+    hideLoading();
+
+    if (result.type === 'reminder') {
+        addReminder({
+            topic: result.topic || 'Напоминание',
+            remindAt: result.datetime || new Date(Date.now() + 3600000).toISOString()
+        });
+    } else if (result.type === 'income' || result.type === 'expense') {
+        addTransactionFromParse({
+            type: result.type,
+            amount: result.amount || 0,
+            description: result.description || (result.type === 'income' ? 'Доход' : 'Расход')
+        });
+    } else {
+        showToast('Не понял. Примеры: "напомни завтра в 9" или "доход 50000"', 'warning');
+    }
+}
+
+async function sendTextInput() {
+    const input = $('textInput');
+    const text = input ? input.value.trim() : '';
+
+    if (!text) {
+        showToast('Введите текст', 'warning');
+        return;
+    }
+
+    closeSheet('text');
+    await processInput(text);
+    if (input) input.value = '';
+}
+
+// Локальный fallback парсер
+function parseLocally(text) {
+    const lower = text.toLowerCase();
+    const now = new Date();
+
+    // ФИНАНСЫ
+    const isIncome = /доход|зп|зарплата|получил|заработал/i.test(lower);
+    const isExpense = /расход|потратил|купил|заплатил/i.test(lower);
+
+    if (isIncome || isExpense) {
+        let amount = 0;
+        // 50к или 50 к
+        const kMatch = text.match(/(\d+)\s*к(?:\s|$|,)/i);
+        if (kMatch) {
+            amount = parseInt(kMatch[1]) * 1000;
+        } else {
+            const numMatch = text.match(/(\d+)/);
+            if (numMatch) amount = parseInt(numMatch[1]);
+        }
+
+        if (amount > 0) {
+            return {
+                type: isIncome ? 'income' : 'expense',
+                amount: amount,
+                description: isIncome ? 'Доход' : 'Расход'
+            };
+        }
+    }
+
+    // НАПОМИНАНИЯ
+    const hasReminder = /напомни|напоминание|завтра|через|утром|вечером/i.test(lower);
+    if (hasReminder) {
+        let remindAt = new Date();
+        let topic = text;
+
+        // Завтра
+        if (lower.includes('завтра')) {
+            remindAt.setDate(now.getDate() + 1);
+            remindAt.setHours(10, 0, 0, 0);
+            topic = topic.replace(/завтра/gi, '');
+        }
+
+        // Время: "в 15" или "в 15:30"
+        const timeMatch = text.match(/в\s*(\d{1,2})(?::(\d{2}))?/i);
+        if (timeMatch) {
+            remindAt.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2] || 0), 0, 0);
+            topic = topic.replace(timeMatch[0], '');
+        }
+
+        // Утром/вечером
+        if (lower.includes('утром')) {
+            remindAt.setHours(8, 0, 0, 0);
+            topic = topic.replace(/утром/gi, '');
+        } else if (lower.includes('вечером')) {
+            remindAt.setHours(20, 0, 0, 0);
+            topic = topic.replace(/вечером/gi, '');
+        }
+
+        // Через час
+        if (lower.includes('через час')) {
+            remindAt = new Date(now.getTime() + 3600000);
+            topic = topic.replace(/через\s*час/gi, '');
+        }
+
+        // Чистим topic
+        topic = topic.replace(/напомни|напоминание|о|про|что/gi, '').trim();
+        if (!topic) topic = 'Напоминание';
+
+        // Если в прошлом
+        if (remindAt < now) {
+            remindAt.setDate(remindAt.getDate() + 1);
+        }
+
+        return {
+            type: 'reminder',
+            topic: topic.charAt(0).toUpperCase() + topic.slice(1),
+            datetime: remindAt.toISOString()
+        };
+    }
+
+    return { type: 'unknown' };
+}
+
+// ===================== REMINDERS =====================
+function addReminder(data) {
+    const reminder = {
+        id: Date.now(),
+        topic: data.topic,
+        remindAt: data.remindAt,
+        repeatType: 'once',
+        isCompleted: false,
+        createdAt: new Date().toISOString()
+    };
+
+    state.reminders.push(reminder);
+    saveData();
+    render();
+
+    const date = new Date(data.remindAt);
+    showToast(`Напомню: ${formatDateTime(date)}`, 'success');
+    haptic('success');
+
+    if (tg) {
+        tg.sendData(JSON.stringify({
+            action: 'reminder_created',
+            reminder: reminder
+        }));
+    }
+}
+
+function toggleReminder(id) {
+    const reminder = state.reminders.find(r => r.id === id);
+    if (reminder) {
+        reminder.isCompleted = !reminder.isCompleted;
+        saveData();
+        render();
+        haptic('light');
+    }
+}
+
+function deleteReminder(id) {
+    state.reminders = state.reminders.filter(r => r.id !== id);
+    saveData();
+    render();
+    closeSheet('reminder');
+    showToast('Удалено', 'success');
+}
+
+function openReminderSheet(id) {
+    const reminder = state.reminders.find(r => r.id === id);
+    if (!reminder) return;
+
+    const date = new Date(reminder.remindAt);
+    const title = $('reminderSheetTitle');
+    const content = $('reminderSheetContent');
+    const footer = $('reminderSheetFooter');
+
+    if (title) title.textContent = reminder.isCompleted ? 'Выполнено' : 'Напоминание';
+    if (content) content.innerHTML = `
+        <div class="reminder-detail">
+            <div class="detail-row">
+                <span class="detail-label">Тема</span>
+                <span class="detail-value">${escapeHtml(reminder.topic)}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Когда</span>
+                <span class="detail-value">${formatDateTime(date)}</span>
+            </div>
+        </div>
+    `;
+
+    if (footer) {
+        footer.innerHTML = reminder.isCompleted ? `
+            <button class="btn-primary" onclick="toggleReminder(${id}); closeSheet('reminder');">Восстановить</button>
+        ` : `
+            <div style="display: flex; gap: 12px;">
+                <button class="btn-primary" style="flex:1" onclick="toggleReminder(${id}); closeSheet('reminder');">✓ Готово</button>
+                <button class="settings-danger" style="flex:1" onclick="deleteReminder(${id})">Удалить</button>
+            </div>
+        `;
+    }
+
+    openSheet('reminder');
+}
+
+window.toggleReminder = toggleReminder;
+window.deleteReminder = deleteReminder;
+window.openReminderSheet = openReminderSheet;
+window.closeSheet = closeSheet;
+
+// ===================== TRANSACTIONS =====================
+function addTransaction() {
+    const amountEl = $('transAmount');
+    const descEl = $('transDesc');
+    const amount = amountEl ? parseFloat(amountEl.value) : 0;
+    const desc = descEl ? descEl.value.trim() : '';
+
+    if (!amount || amount <= 0) {
+        showToast('Введите сумму', 'warning');
+        return;
+    }
+
+    const transaction = {
+        id: Date.now(),
+        type: state.transactionType,
+        amount,
+        description: desc || (state.transactionType === 'income' ? 'Доход' : 'Расход'),
+        createdAt: new Date().toISOString()
+    };
+
+    state.transactions.unshift(transaction);
+    saveData();
+    render();
+    closeSheet('transaction');
+
+    if (amountEl) amountEl.value = '';
+    if (descEl) descEl.value = '';
+
+    showToast(state.transactionType === 'income' ? 'Доход +' : 'Расход -', 'success');
+    haptic('success');
+}
+
+function addTransactionFromParse(data) {
+    if (!data.amount || data.amount <= 0) {
+        showToast('Не удалось определить сумму', 'warning');
+        return;
+    }
+
+    const transaction = {
+        id: Date.now(),
+        type: data.type,
+        amount: data.amount,
+        description: data.description,
+        createdAt: new Date().toISOString()
+    };
+
+    state.transactions.unshift(transaction);
+    saveData();
+    render();
+
+    showToast(`${data.type === 'income' ? '+' : '-'}${formatCurrency(data.amount)}`, 'success');
+    haptic('success');
+}
+
+// ===================== SETTINGS =====================
+function updateSettings() {
+    const notif = $('settingsNotifications');
+    const morning = $('settingsMorning');
+    if (notif) state.settings.notifications = notif.checked;
+    if (morning) state.settings.morningTime = morning.value;
+    saveData();
+}
+
+function clearAllData() {
+    if (confirm('Удалить все данные?')) {
+        state.reminders = [];
+        state.transactions = [];
+        localStorage.removeItem('organizer_data');
+        render();
+        closeSheet('settings');
+        showToast('Данные удалены', 'success');
+    }
+}
+
+// ===================== UI =====================
+function switchTab(tab) {
+    state.currentTab = tab;
+    $$('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+    $$('.tab-pane').forEach(pane => pane.classList.toggle('active', pane.id === tab + 'Pane'));
+}
+
+function openSheet(type) {
+    const overlay = $(`${type}SheetOverlay`);
+    const sheet = $(`${type}Sheet`);
+    if (overlay) overlay.classList.add('active');
+    if (sheet) sheet.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeSheet(type) {
+    const overlay = $(`${type}SheetOverlay`);
+    const sheet = $(`${type}Sheet`);
+    if (overlay) overlay.classList.remove('active');
+    if (sheet) sheet.classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function showLoading(text = 'Загрузка...') {
+    const overlay = $('loadingOverlay');
+    const textEl = $('loadingText');
+    if (textEl) textEl.textContent = text;
+    if (overlay) overlay.classList.add('active');
+}
+
+function hideLoading() {
+    const overlay = $('loadingOverlay');
+    if (overlay) overlay.classList.remove('active');
+}
+
+function showToast(message, type = 'info') {
+    const container = $('toastContainer');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+
+    const icons = {
+        success: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/>',
+        error: '<circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/>',
+        warning: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/>',
+        info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>'
+    };
+
+    toast.innerHTML = `
+        <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${icons[type] || icons.info}</svg>
+        <span class="toast-message">${escapeHtml(message)}</span>
+    `;
+
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.classList.add('removing');
+        setTimeout(() => toast.remove(), 200);
+    }, 3500);
+}
+
+function haptic(type) {
+    if (tg?.HapticFeedback) {
+        try {
+            if (['light', 'medium', 'heavy'].includes(type)) {
+                tg.HapticFeedback.impactOccurred(type);
+            } else {
+                tg.HapticFeedback.notificationOccurred(type);
+            }
+        } catch (e) { }
+    }
+}
+
+// ===================== RENDER =====================
+function render() {
+    renderStats();
+    renderReminders();
+    renderFinance();
+}
+
+function renderStats() {
+    const now = new Date();
+    const today = now.toDateString();
+
+    const active = state.reminders.filter(r => !r.isCompleted);
+    const todayReminders = active.filter(r => new Date(r.remindAt).toDateString() === today);
+    const done = state.reminders.filter(r => r.isCompleted);
+
+    const statActive = $('statActive');
+    const statToday = $('statToday');
+    const statDone = $('statDone');
+
+    if (statActive) statActive.textContent = active.length;
+    if (statToday) statToday.textContent = todayReminders.length;
+    if (statDone) statDone.textContent = done.length;
+}
+
+function renderReminders() {
+    const filtered = state.reminders
+        .filter(r => state.reminderFilter === 'active' ? !r.isCompleted : r.isCompleted)
+        .sort((a, b) => new Date(a.remindAt) - new Date(b.remindAt));
+
+    const list = $('remindersList');
+    if (!list) return;
+
+    if (filtered.length === 0) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </div>
+                <p>Нет напоминаний</p>
+                <span>Скажи голосом или напиши</span>
+            </div>
+        `;
+        return;
+    }
+
+    list.innerHTML = filtered.map(r => {
+        const date = new Date(r.remindAt);
+        return `
+            <div class="reminder-item ${r.isCompleted ? 'completed' : ''}" onclick="openReminderSheet(${r.id})">
+                <div class="reminder-check" onclick="event.stopPropagation(); toggleReminder(${r.id})">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="reminder-content">
+                    <div class="reminder-topic">${escapeHtml(r.topic)}</div>
+                    <div class="reminder-meta">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        ${formatDateTime(date)}
+                    </div>
+                </div>
+                <svg class="reminder-arrow" viewBox="0 0 24 24" fill="none">
+                    <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderFinance() {
+    const income = state.transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const expense = state.transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const balance = income - expense;
+
+    const balEl = $('balanceValue');
+    const incEl = $('totalIncome');
+    const expEl = $('totalExpense');
+
+    if (balEl) balEl.textContent = formatCurrency(balance);
+    if (incEl) incEl.textContent = formatCurrency(income);
+    if (expEl) expEl.textContent = formatCurrency(expense);
+
+    const list = $('transactionsList');
+    if (!list) return;
+
+    if (state.transactions.length === 0) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </div>
+                <p>Нет операций</p>
+                <span>Добавь доход или расход</span>
+            </div>
+        `;
+        return;
+    }
+
+    list.innerHTML = state.transactions.slice(0, 20).map(t => {
+        const date = new Date(t.createdAt);
+        return `
+            <div class="transaction-item ${t.type}">
+                <div class="transaction-icon">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        ${t.type === 'income'
+                ? '<path d="M23 6l-9.5 9.5-5-5L1 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+                : '<path d="M23 18l-9.5-9.5-5 5L1 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+            }
+                    </svg>
+                </div>
+                <div class="transaction-content">
+                    <div class="transaction-desc">${escapeHtml(t.description)}</div>
+                    <div class="transaction-date">${formatDate(date)}</div>
+                </div>
+                <div class="transaction-amount">${t.type === 'income' ? '+' : '-'}${formatCurrency(t.amount)}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ===================== UTILS =====================
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatDate(date) {
+    const now = new Date();
+    if (date.toDateString() === now.toDateString()) return 'Сегодня';
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) return 'Вчера';
+    return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+}
+
+function formatDateTime(date) {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    let dayStr;
+    if (date.toDateString() === now.toDateString()) dayStr = 'Сегодня';
+    else if (date.toDateString() === tomorrow.toDateString()) dayStr = 'Завтра';
+    else dayStr = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+
+    return `${dayStr} в ${date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function formatCurrency(amount) {
+    return new Intl.NumberFormat('ru-RU', {
+        style: 'currency',
+        currency: 'RUB',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+    }).format(amount);
+}
+
+// Add detail styles
+const detailStyle = document.createElement('style');
+detailStyle.textContent = `
+.reminder-detail { padding: 8px 0; }
+.detail-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--glass-border); }
+.detail-row:last-child { border-bottom: none; }
+.detail-label { color: var(--text-tertiary); font-size: 14px; }
+.detail-value { color: var(--text-primary); font-weight: 500; }
+`;
+document.head.appendChild(detailStyle);
